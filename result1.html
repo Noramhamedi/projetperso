@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Recherche Sémantique</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="header">
+    <!-- Logo en haut à gauche -->
+    <img src="{{ url_for('static', filename='images/logo.jpg') }}" alt="Logo" class="logo">
+
+    <input type="text" id="searchInput" class="search-bar" placeholder="Entrer un mot-clé..." onkeydown="handleKey(event)">
+    <div class="tag-container" id="tagContainer">
+      {% for mot in mots_initials %}
+        <div class="tag">
+          <span class="close-btn" onclick="removeTag(this)">×</span>
+          {{ mot }}
+        </div>
+      {% endfor %}
+    </div>
+    <!-- Boutons à droite -->
+    <div class="buttons-container">
+      <button class="btn" onclick="generateGraph('month')">Graphe par mois</button>
+      <button class="btn" onclick="generateGraph('year')">Graphe par année</button>
+    </div>
+  </div>
+
+  <!-- Bloc d'analyse statistique avancée -->
+  <details class="stats-section">
+    <summary>📊 Voir l'analyse statistique avancée</summary>
+    <ul>
+      <li><strong>Moyenne :</strong> <span id="stats-mean">-</span></li>
+      <li><strong>Écart-type :</strong> <span id="stats-std">-</span></li>
+      <li><strong>Médiane :</strong> <span id="stats-median">-</span></li>
+      <li><strong>Minimum :</strong> <span id="stats-min">-</span></li>
+      <li><strong>Maximum :</strong> <span id="stats-max">-</span></li>
+    </ul>
+  </details>
+
+  <!-- Zone d'affichage des graphes -->
+  <div class="graph-area">
+    <canvas id="resultsChart"></canvas>
+    {% if graph_image %}
+    <img src="data:image/png;base64,{{ graph_image }}" alt="Graphique des résultats">
+    {% endif %}
+  </div>
+
+<script>
+  let currentResults = null;
+  let currentChart = null;
+
+  // Handle Enter key in search bar
+  function handleKey(event) {
+    if (event.key === 'Enter') {
+      performSearch();
+    }
+  }
+
+  // Perform search
+  function performSearch() {
+    const searchText = document.getElementById('searchInput').value;
+    
+    fetch('/recherche', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: `texte=${encodeURIComponent(searchText)}&fichiers[]=file1.xlsx` // Adjust file names as needed
+    })
+    .then(response => response.json())
+    .then(data => {
+      currentResults = data;
+      updateUI(data);
+    })
+    .catch(error => console.error('Error:', error));
+  }
+
+  // Update UI with search results
+  function updateUI(data) {
+    // Update tags
+    const tagContainer = document.getElementById('tagContainer');
+    tagContainer.innerHTML = '';
+    
+    data.mots_cles.forEach(mot => {
+      const tag = document.createElement('div');
+      tag.className = 'tag';
+      tag.innerHTML = `<span class="close-btn" onclick="removeTag(this)">×</span>${mot}`;
+      tagContainer.appendChild(tag);
+    });
+    
+    // Update stats (placeholder - implement real stats)
+    document.getElementById('stats-mean').textContent = Math.round(data.summary.total_results / 12);
+    document.getElementById('stats-std').textContent = 'N/A';
+    document.getElementById('stats-median').textContent = 'N/A';
+    document.getElementById('stats-min').textContent = 0;
+    document.getElementById('stats-max').textContent = data.summary.total_results;
+    
+    // Update graph if available
+    if (data.graph) {
+      const graphArea = document.querySelector('.graph-area');
+      graphArea.innerHTML = `<img src="data:image/png;base64,${data.graph}" alt="Graphique des résultats">`;
+    }
+  }
+
+  // Generate graph
+  function generateGraph(type) {
+    if (!currentResults) return;
+    
+    fetch('/graph', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        file_index: 0,
+        lines: currentResults.summary.by_file[Object.keys(currentResults.summary.by_file)[0]],
+        type: type
+      })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.graph) {
+        const graphArea = document.querySelector('.graph-area');
+        graphArea.innerHTML = `<img src="data:image/png;base64,${data.graph}" alt="Graphique des résultats">`;
+      }
+    });
+  }
+
+  // Fonction pour supprimer un tag (appelée par la croix)
+  function removeTag(elem) {
+    const tag = elem.parentElement;
+    tag.remove();
+  }
+</script>
+
+<style>
+  body {
+    background-color: #1623de;
+    color: white;
+    font-family: Arial, sans-serif;
+    margin: 0;
+  }
+
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px;
+    position: relative;
+    flex-wrap: wrap; /* permet de passer à la ligne */
+    gap: 10px; /* espace entre lignes */
+  }
+
+  .logo {
+    height: 100px;
+    width: 200px;
+  }
+
+  .tag-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;  /* prend toute la largeur */
+    justify-content: center;
+    order: 1;  /* vient juste après la barre */
+    margin-top: 10px; /* espace au-dessus */
+  }
+
+  .tag {
+    background-color: #28527a;
+    padding: 5px 12px 5px 25px;
+    border-radius: 20px;
+    font-size: 14px;
+    position: relative;
+    color: white;
+    user-select: none;
+  }
+
+  .close-btn {
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 16px;
+    color: #ff6b6b;
+  }
+
+  .search-bar {
+    position: relative;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40%;
+    padding: 10px 20px;
+    border-radius: 30px;
+    border: none;
+    font-size: 16px;
+    order: 0; /* juste en dessous des tags */
+  }
+
+  .buttons-container {
+    display: flex;
+    gap: 15px;
+    order: 2;
+  }
+
+  .btn {
+    background-color: #28a745; /* vert */
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.3s;
+  }
+
+  .btn:hover {
+    background-color: #218838; /* vert foncé au hover */
+  }
+
+  .graph-area {
+    margin: 30px 20px;
+    background-color: white;
+    border-radius: 12px;
+    min-height: 400px;
+    padding: 20px;
+  }
+
+  .graph-area img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .stats-section {
+    background: white;
+    color: #182dd8;
+    padding: 20px;
+    margin: 30px auto;
+    width: 60%;
+    border-radius: 10px;
+    box-shadow: 0 0 8px rgba(0,0,0,0.1);
+    cursor: pointer;
+  }
+
+  .stats-section summary {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 10px;
+  }
+
+  .stats-section ul {
+    padding-left: 0;
+    list-style: none;
+    line-height: 1.6;
+  }
+</style>
+</body>
+</html>
